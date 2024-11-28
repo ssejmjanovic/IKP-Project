@@ -34,6 +34,10 @@ public:
         std::lock_guard<std::mutex> lock(mutex);
         return queue.empty();
     }
+
+
+    //komentarisem rsaaaaaaaaaaaaaaaaa
+    // gasolina
 };
 
 #endif // MESSAGEQUEUE_H
