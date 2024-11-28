@@ -88,6 +88,8 @@ int main() {
         closesocket(clientSocket);
 
         std::cout << "Reconnecting to server..." << std::endl;
+
+        //rsaaaaaaaaa
     }
 
     WSACleanup();
