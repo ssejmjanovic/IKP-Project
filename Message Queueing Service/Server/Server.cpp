@@ -1,19 +1,123 @@
-﻿#include <iostream>
+﻿#include "Server.h"
+#include "../Common/MessageQueue.h"
+#include <iostream>
 #include <string>
+#include <thread>
+#include <mutex>
+#include <vector>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
 #pragma comment(lib, "ws2_32.lib") //Winsock biblioteka
 
-#define SERVER_PORT 8080
 #define BUFFER_SIZE 1024
 
-void error(const char* msg) {
-    std::cerr << msg << ": " << WSAGetLastError() << std::endl;
-    exit(EXIT_FAILURE);
+Server::Server(const std::string& serverAddress, int port)
+    : serverAddress(serverAddress), port(port), running(false){}
+
+Server::~Server(){
+    stop();
 }
 
-void handleClient(SOCKET clientSocket) {
+
+void Server::start() {
+    running = true;
+
+    clientThread = std::thread(&Server::handleClientConnection, this);      // Pokretanje niti za konekciju sa klijentom
+
+    serverThread = std::thread(&Server::handleServerConnection, this);      // Pokretanje niti za konekciju sa serverom
+
+    processMessages();      // Obrada poruka u glavnoj niti
+}
+
+void Server::stop() {
+    running = false;
+
+
+    // Obezbedjivanje da sve ostale niti prestanu sa izvrsavanjem
+    if (clientThread.joinable())
+        clientThread.join();
+
+    if (serverThread.joinable())
+        serverThread.join();
+
+    std::cout << "Server stopped." << std::endl;
+}
+
+void Server::handleClientConnection() {
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        throw std::runtime_error("WSAStartup failed");
+    }
+
+    SOCKET serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (serverSocket == INVALID_SOCKET) {
+        WSACleanup();
+        throw std::runtime_error("Socket creation failed");
+    }
+
+    sockaddr_in serverAddr;
+    serverAddr.sin_family = AF_INET;
+    inet_pton(AF_INET, serverAddress.c_str(), &serverAddr.sin_addr);
+    serverAddr.sin_port = htons(port);
+
+    if (bind(serverSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+        closesocket(serverSocket);
+        WSACleanup();
+        throw std::runtime_error("Bind failed");
+    }
+
+    if (listen(serverSocket, SOMAXCONN) == SOCKET_ERROR) {
+        closesocket(serverSocket);
+        WSACleanup();
+        throw std::runtime_error("Listen failed");
+    }
+
+    std::cout << "Listening for client connetions on port " << port << "..." << std::endl;
+
+    while (running) {
+        sockaddr_in clientAddr;
+        int clientAddrLen = sizeof(clientAddr);
+        SOCKET clientSocket = accept(serverSocket, (sockaddr*)&clientAddr, &clientAddrLen);
+        if (clientSocket == INVALID_SOCKET) {
+            if (!running) break;
+            std::cerr << "Accept failed" << WSAGetLastError() << std::endl;
+            continue;
+        }
+
+        char buffer[BUFFER_SIZE];
+        int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE, 0);
+        if (bytesReceived > 0) {
+            std::string message(buffer, bytesReceived);
+            processingQueue.push(message);      // dodaje poruku u red za obradu                               TREBA IMPLEMENTIRATI
+        }
+
+        closesocket(clientSocket);
+    }
+
+    closesocket(serverSocket);
+    WSACleanup();
+
+
+}
+
+void Server::handleServerConnection() {
+    while (running) {
+        // Ova nit šalje poruke drugom serveru koristeći sendingQueue
+        while (!sendingQueue.empty()) {                                                                      //treba implementirati!!!!!!!!!!!!!!!
+            std::string message = sendingQueue.pop();                                                        //treba implementirati!!!!!!!!!!!!!!!!!!
+            std::cout << "Sending message to another server: " << message << std::endl;
+            // Implementacija slanja poruka prema drugom serveru (TCP/UDP)
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Kratka pauza
+    }
+}
+
+
+
+
+/*void handleClient(SOCKET clientSocket) {
     char buffer[BUFFER_SIZE];
 
     while (true) {
@@ -25,7 +129,7 @@ void handleClient(SOCKET clientSocket) {
             std::cout << "Client disconnected." << std::endl;
             break;
         }
-
+        
         std::cout << "Received from client: " << buffer << std::endl;
 
         // Echo poruka za proveru da li funkcionise
@@ -34,58 +138,28 @@ void handleClient(SOCKET clientSocket) {
     }
 
     closesocket(clientSocket);
-}
+}*/
 
 int main() {
-    WSADATA wsaData;
+    const std::string serverAddress = "127.0.0.1"; // Adresa na kojoj server osluškuje
+    const int serverPort = 8080;                  // Port na kojem server osluškuje
 
-    // Inicijalizacija Winsock-a
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        error("WSAStartup failed");
+    try {
+        // Kreiranje i pokretanje servera
+        Server server(serverAddress, serverPort);
+        std::cout << "Starting server..." << std::endl;
+        server.start();
+
+        // Program ostaje aktivan dok server radi
+        std::cout << "Server is running. Press Enter to stop..." << std::endl;
+        std::cin.get(); // Čeka unos korisnika za zaustavljanje servera
+
+        server.stop(); // Zaustavlja server
+    }
+    catch (const std::exception& ex) {
+        std::cerr << "Error: " << ex.what() << std::endl;
     }
 
-    //Kreiranje server socket-a
-    SOCKET serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (serverSocket == INVALID_SOCKET) {
-        error("Socket creation failed");
-    }
-
-    sockaddr_in serverAddr;
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = INADDR_ANY;
-    serverAddr.sin_port = htons(SERVER_PORT);
-
-    //Bind server socket-a
-    if (bind(serverSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
-        error("Bind failed");
-    }
-
-    //Osluskivanje radi konekcije
-    if (listen(serverSocket, SOMAXCONN) == SOCKET_ERROR) {
-        error("Listen failed");
-    }
-
-    std::cout << "Server is listening on port " << SERVER_PORT << std::endl;
-
-    // Petlja za prihvatanje klijenata
-    while (true) {
-        sockaddr_in clientAddr;
-        int clientAddrLen = sizeof(clientAddr);
-        SOCKET clientSocket = accept(serverSocket, (sockaddr*)&clientAddr, &clientAddrLen);
-        if (clientSocket == INVALID_SOCKET) {
-            std::cerr << "Accept failed: " << WSAGetLastError() << std::endl;
-            continue; // Nastavlja slušanje novih klijenata
-        }
-
-        char clientIp[INET_ADDRSTRLEN]; // Bafer za IP adresu klijenta
-        inet_ntop(AF_INET, &clientAddr.sin_addr, clientIp, INET_ADDRSTRLEN); // Konvertovanje adrese u čitljiv format
-        std::cout << "Client connected: " << clientIp << std::endl;
-
-        // Rukovanje komunikacijom sa klijentom
-        handleClient(clientSocket);
-    }
-
-    closesocket(serverSocket);
-    WSACleanup();
+    std::cout << "Server has stopped." << std::endl;
     return 0;
 }

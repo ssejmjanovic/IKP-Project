@@ -152,6 +152,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="framework.h" />
+    <ClInclude Include="MessageQueue.h" />
     <ClInclude Include="ThreadPool.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
