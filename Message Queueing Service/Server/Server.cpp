@@ -11,6 +11,7 @@
 #pragma comment(lib, "ws2_32.lib") //Winsock biblioteka
 
 #define BUFFER_SIZE 1024
+#define OTHER_SERVER_PORT 8081
 
 Server::Server(const std::string& serverAddress, int port)
     : serverAddress(serverAddress), port(port), running(false){}
@@ -89,7 +90,7 @@ void Server::handleClientConnection() {
         int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE, 0);
         if (bytesReceived > 0) {
             std::string message(buffer, bytesReceived);
-            processingQueue.push(message);      // dodaje poruku u red za obradu                               TREBA IMPLEMENTIRATI
+            processingQueue.enqueue(message);     
         }
 
         closesocket(clientSocket);
@@ -102,43 +103,77 @@ void Server::handleClientConnection() {
 }
 
 void Server::handleServerConnection() {
+    SOCKET serverSocket = INVALID_SOCKET;
+    SOCKET otherServerSocket = INVALID_SOCKET;
+
+    serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (serverSocket == INVALID_SOCKET) {
+        std::cerr << "Error creating server socket: " << WSAGetLastError() << std::endl;
+        return;
+    }
+
+    sockaddr_in serverAddr;
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
+    serverAddr.sin_port = htons(OTHER_SERVER_PORT);     // Port drugog servera
+    
+    // Binds server socket
+    if (bind(serverSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+        std::cerr << "Error binding server socket: " << WSAGetLastError() << std::endl;
+        closesocket(serverSocket);
+        return;
+    }
+
+    // Postavljanje u rezim osluskivanja
+    if (listen(serverSocket, SOMAXCONN) == SOCKET_ERROR) {
+        std::cerr << "Error setting server socket to listen mode: " << WSAGetLastError() << std::endl;
+        closesocket(serverSocket);
+        return;
+    }
+
+    std::cout << "Waiting for connection from another server... " << std::endl;
+    
+    sockaddr_in clientAddr;
+    int clientAddrSize = sizeof(clientAddr);
+
+    // Prihvatanje konekcije od drugog servera
+    otherServerSocket = accept(serverSocket, (sockaddr*)&clientAddr, &clientAddrSize);
+    if (otherServerSocket == INVALID_SOCKET) {
+        std::cerr << "Error accepting connection: " << WSAGetLastError() << std::endl;
+        closesocket(serverSocket);
+        return;
+    }
+
+    char clientIp[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &clientAddr.sin_addr, clientIp, INET_ADDRSTRLEN);
+    std::cout << "Connected to another server: " << clientIp << std::endl;
+
+    //Slanje poruka drugom serveru
     while (running) {
         // Ova nit šalje poruke drugom serveru koristeći sendingQueue
-        while (!sendingQueue.empty()) {                                                                      //treba implementirati!!!!!!!!!!!!!!!
-            std::string message = sendingQueue.pop();                                                        //treba implementirati!!!!!!!!!!!!!!!!!!
+        while (!sendingQueue.isEmpty()) {                                                                      
+            std::string message = sendingQueue.dequeue();                                                        
             std::cout << "Sending message to another server: " << message << std::endl;
-            // Implementacija slanja poruka prema drugom serveru (TCP/UDP)
+            
+
+            // Slanje poruke drugom serveru
+            int bytesSent = send(otherServerSocket, message.c_str(), message.size(), 0);
+            if (bytesSent == SOCKET_ERROR) {
+                std::cerr << "Error sending message: " << WSAGetLastError() << std::endl;
+                break;
+            }
         }
+
+
 
         std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Kratka pauza
     }
+
+    closesocket(otherServerSocket);
+    closesocket(serverSocket);
+    
 }
 
-
-
-
-/*void handleClient(SOCKET clientSocket) {
-    char buffer[BUFFER_SIZE];
-
-    while (true) {
-        memset(buffer, 0, BUFFER_SIZE);
-
-        // Primanje poruka od klijenta
-        int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE, 0);
-        if (bytesReceived <= 0) {
-            std::cout << "Client disconnected." << std::endl;
-            break;
-        }
-        
-        std::cout << "Received from client: " << buffer << std::endl;
-
-        // Echo poruka za proveru da li funkcionise
-        std::string response = "Echo: " + std::string(buffer);
-        send(clientSocket, response.c_str(), response.size(), 0);
-    }
-
-    closesocket(clientSocket);
-}*/
 
 int main() {
     const std::string serverAddress = "127.0.0.1"; // Adresa na kojoj server osluškuje

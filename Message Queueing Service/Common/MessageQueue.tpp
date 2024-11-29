@@ -24,3 +24,16 @@ bool MessageQueue<T>::tryDequeue(T& item) {
     queue.pop();
     return true;
 }
+
+template <class T>
+bool MessageQueue<T>::isEmpty(){
+    std::lock_guard<std::mutex> lock(mutex);
+    if(queue.empty())
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}

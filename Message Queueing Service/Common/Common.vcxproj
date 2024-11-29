@@ -166,6 +166,9 @@
     </ClCompile>
     <ClCompile Include="ThreadPool.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="MessageQueue.tpp" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

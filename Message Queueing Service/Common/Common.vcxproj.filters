@@ -39,4 +39,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="MessageQueue.tpp">
+      <Filter>Header Files</Filter>
+    </None>
+  </ItemGroup>
 </Project>

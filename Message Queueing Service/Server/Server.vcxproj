@@ -151,7 +151,6 @@
     <ProjectReference Include="..\Common\Common.vcxproj">
       <Project>{0b05cd9d-e454-45c3-9668-bc4304cd04a3}</Project>
     </ProjectReference>
-    <ClInclude Include="Test.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

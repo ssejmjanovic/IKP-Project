@@ -17,6 +17,7 @@ public:
 	void enqueue(const T& item);
 	T dequeue();
 	bool tryDequeue(T& item);
+	bool isEmpty();
 };
 
 #include "MessageQueue.tpp"
