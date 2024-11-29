@@ -90,7 +90,7 @@ void Server::handleClientConnection() {
         int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE, 0);
         if (bytesReceived > 0) {
             std::string message(buffer, bytesReceived);
-            processingQueue.enqueue(message);     
+            sendingQueue.enqueue(message);     
         }
 
         closesocket(clientSocket);
@@ -164,7 +164,10 @@ void Server::handleServerConnection() {
             }
         }
 
-
+        // NA SERVERSKOJ STRANI JE OBEZBEDJENO DA SALJE DRUGOM SERVERU PORUKE KOJE DOBIJE OD
+        // KLIJENTA, ALI NIJE OBEZBEDJENO JOS UVEK DA MOZE U ISTO VREME DA PRIMA
+        // OD DRUGOG SERVERA I DA PROSLEDJUJE KLIJENTU, MOGUCE JE DA SU POTREBNE PO DVE NITI
+        // NA SERVERU I KLIJENTU, NA OBE STRANE ZA SLANJE I PRIMANJE - TO URADI
 
         std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Kratka pauza
     }
@@ -174,6 +177,17 @@ void Server::handleServerConnection() {
     
 }
 
+void Server::SendToQueue(const std::string& queueName, const std::string& message) {
+    messageQueueService.SendMessageW(queueName, message.data(), message.size());
+
+}
+
+//----------------------------------------------------------------------
+//----------------------------------------------------------------------
+//---------------------            MAIN             --------------------
+//----------------------------------------------------------------------
+//----------------------------------------------------------------------
+
 
 int main() {
     const std::string serverAddress = "127.0.0.1"; // Adresa na kojoj server osluškuje
@@ -182,12 +196,22 @@ int main() {
     try {
         // Kreiranje i pokretanje servera
         Server server(serverAddress, serverPort);
-        std::cout << "Starting server..." << std::endl;
+        std::cout << "Starting server..." << serverAddress << ":" << serverPort << "..." << std::endl;
         server.start();
 
         // Program ostaje aktivan dok server radi
-        std::cout << "Server is running. Press Enter to stop..." << std::endl;
-        std::cin.get(); // Čeka unos korisnika za zaustavljanje servera
+        std::cout << "Server is running. Type 'exit' and press Enter t stop..." << std::endl;
+        std::string command;
+        while (true) {
+            std::getline(std::cin, command);
+            if (command == "exit") {
+                std::cout << "Stopping server..." << std::endl;
+                break;
+            }
+            else {
+                std::cout << "Unknown command. Type 'exit' to stop the server." << std::endl;
+            }
+        }
 
         server.stop(); // Zaustavlja server
     }

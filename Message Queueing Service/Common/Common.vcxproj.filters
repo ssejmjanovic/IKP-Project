@@ -27,6 +27,12 @@
     <ClInclude Include="MessageQueue.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="MessageQueueService.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ConcreteMessageQueueServiceh.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -36,6 +42,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ThreadPool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ConcreteMessageQueueService.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
