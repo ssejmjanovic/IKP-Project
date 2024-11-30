@@ -13,8 +13,8 @@
 #define BUFFER_SIZE 1024
 #define OTHER_SERVER_PORT 8081
 
-Server::Server(const std::string& serverAddress, int port)
-    : serverAddress(serverAddress), port(port), running(false){}
+Server::Server(const std::string& serverAddress, int port, size_t threadPoolSize)
+    : serverAddress(serverAddress), port(port), running(false), threadPool(threadPoolSize){}
 
 Server::~Server(){
     stop();
@@ -24,25 +24,32 @@ Server::~Server(){
 void Server::start() {
     running = true;
 
-    clientThread = std::thread(&Server::handleClientConnection, this);      // Pokretanje niti za konekciju sa klijentom
+    // Pokretanje niti za rukovanje konekcijama preko ThreadPool-a
+    threadPool.enqueue([this]() {handleClientConnection(); });
+    threadPool.enqueue([this]() {handleServerConnection(); });
 
-    serverThread = std::thread(&Server::handleServerConnection, this);      // Pokretanje niti za konekciju sa serverom
-
-    processMessages();      // Obrada poruka u glavnoj niti
+    std::cout << "Server started on " << serverAddress << ":" << port << std::endl;
 }
 
 void Server::stop() {
     running = false;
+    
+    std::cout << "Stopping server..." << std::endl;
 
-
-    // Obezbedjivanje da sve ostale niti prestanu sa izvrsavanjem
-    if (clientThread.joinable())
-        clientThread.join();
-
-    if (serverThread.joinable())
-        serverThread.join();
+    // Pauza kako bi se osigurao zavrsetak preostalih zadataka u ThreadPool-u
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
     std::cout << "Server stopped." << std::endl;
+}
+
+void Server::SendToQueue(const std::string& queueName, const std::string& message) {
+    messageQueueService.SendMessageW(queueName.c_str(), message.data(), message.size());
+}
+
+void Server::receiveFromOtherServer(SOCKET otherServerSocket) {
+    while (running) {
+
+    }
 }
 
 void Server::handleClientConnection() {
@@ -86,27 +93,28 @@ void Server::handleClientConnection() {
             continue;
         }
 
-        char buffer[BUFFER_SIZE];
-        int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE, 0);
-        if (bytesReceived > 0) {
-            std::string message(buffer, bytesReceived);
-            sendingQueue.enqueue(message);     
-        }
+        threadPool.enqueue([this, clientSocket = std::move(clientSocket)]() mutable {
+            char buffer[BUFFER_SIZE];
+            int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE, 0);
+            if (bytesReceived > 0) {
+                std::string message(buffer, bytesReceived);
+                sendingQueue.enqueue(message);
+                std::cout << "Received message from client: " << message << std::endl;
+            }
 
-        closesocket(clientSocket);
+            // Prosledjivanje odgovora klijentu
+            forwardToClient(clientSocket);
+            closesocket(clientSocket);
+        });
     }
 
     closesocket(serverSocket);
     WSACleanup();
-
-
 }
 
 void Server::handleServerConnection() {
-    SOCKET serverSocket = INVALID_SOCKET;
-    SOCKET otherServerSocket = INVALID_SOCKET;
-
-    serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    
+    SOCKET serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (serverSocket == INVALID_SOCKET) {
         std::cerr << "Error creating server socket: " << WSAGetLastError() << std::endl;
         return;
@@ -131,55 +139,57 @@ void Server::handleServerConnection() {
         return;
     }
 
-    std::cout << "Waiting for connection from another server... " << std::endl;
-    
-    sockaddr_in clientAddr;
-    int clientAddrSize = sizeof(clientAddr);
-
-    // Prihvatanje konekcije od drugog servera
-    otherServerSocket = accept(serverSocket, (sockaddr*)&clientAddr, &clientAddrSize);
-    if (otherServerSocket == INVALID_SOCKET) {
-        std::cerr << "Error accepting connection: " << WSAGetLastError() << std::endl;
-        closesocket(serverSocket);
-        return;
-    }
-
-    char clientIp[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &clientAddr.sin_addr, clientIp, INET_ADDRSTRLEN);
-    std::cout << "Connected to another server: " << clientIp << std::endl;
+    std::cout << "Waiting for connection from another server on port " << OTHER_SERVER_PORT << "..." << std::endl;
 
     //Slanje poruka drugom serveru
     while (running) {
-        // Ova nit šalje poruke drugom serveru koristeći sendingQueue
-        while (!sendingQueue.isEmpty()) {                                                                      
-            std::string message = sendingQueue.dequeue();                                                        
-            std::cout << "Sending message to another server: " << message << std::endl;
-            
-
-            // Slanje poruke drugom serveru
-            int bytesSent = send(otherServerSocket, message.c_str(), message.size(), 0);
-            if (bytesSent == SOCKET_ERROR) {
-                std::cerr << "Error sending message: " << WSAGetLastError() << std::endl;
-                break;
-            }
+        
+        sockaddr_in clientAddr;
+        int clientAddrSize = sizeof(clientAddr);
+        SOCKET otherServerSocket = accept(serverSocket, (sockaddr*)&clientAddr, &clientAddrSize);
+        if (otherServerSocket == INVALID_SOCKET) {
+            if (!running) break;
+            std::cerr << "Accept failed: " << WSAGetLastError() << std::endl;
+            continue;
         }
 
-        // NA SERVERSKOJ STRANI JE OBEZBEDJENO DA SALJE DRUGOM SERVERU PORUKE KOJE DOBIJE OD
-        // KLIJENTA, ALI NIJE OBEZBEDJENO JOS UVEK DA MOZE U ISTO VREME DA PRIMA
-        // OD DRUGOG SERVERA I DA PROSLEDJUJE KLIJENTU, MOGUCE JE DA SU POTREBNE PO DVE NITI
-        // NA SERVERU I KLIJENTU, NA OBE STRANE ZA SLANJE I PRIMANJE - TO URADI
+        // Pokretanje niti za primanje poruka od drugog servera
+        threadPool.enqueue([this, otherServerSocket]() {receiveFromOtherServer(otherServerSocket); });
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Kratka pauza
+        // Pokratanje niti za slanje poruka drugom serveru
+        threadPool.enqueue([this, otherServerSocket]() {
+            while (running) {
+                while (!sendingQueue.isEmpty()) {
+                    std::string message = sendingQueue.dequeue();
+                    int bytesSent = send(otherServerSocket, message.c_str(), message.size(), 0);
+                    if (bytesSent == SOCKET_ERROR) {
+                        std::cerr << "Error sending message to server: " << WSAGetLastError() << std::endl;
+                        break;
+                    }
+                    std::cout << "Sent message to server: " << message << std::endl;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+            closesocket(otherServerSocket);
+
+            });
     }
 
-    closesocket(otherServerSocket);
     closesocket(serverSocket);
     
 }
 
-void Server::SendToQueue(const std::string& queueName, const std::string& message) {
-    messageQueueService.SendMessageW(queueName, message.data(), message.size());
 
+void Server::forwardToClient(SOCKET clientSocket) {
+    while (!receivingQueue.isEmpty()) {
+        std::string message = receivingQueue.dequeue();
+        int bytesSent = send(clientSocket, message.c_str(), message.size(), 0);
+        if (bytesSent == SOCKET_ERROR) {
+            std::cerr << "Error sending message to client: " << WSAGetLastError() << std::endl;
+            return;
+        }
+        std::cout << "Forwarded message to client: " << message << std::endl;
+    }
 }
 
 //----------------------------------------------------------------------

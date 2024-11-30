@@ -8,6 +8,7 @@
 #include <vector>
 #include "../Common/MessageQueue.h"
 #include "../Common/ConcreteMessageQueueServiceh.h"
+#include "../Common/ThreadPool.h"
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -15,9 +16,8 @@ class Server {
 private:
     std::string serverAddress;      // Adresa servera
     int port;                       // Port servera
-    bool running;                   // Indikator da li server radi
-    std::thread clientThread;       // Nit za komunikaciju sa klijentom
-    std::thread serverThread;       // Nit za komunikaciju sa drugim serverom
+    std::atomic<bool> running;      // Indikator da li server radi
+    ThreadPool threadPool;          // Thread pool za upravljanje nitima
     
     ConcreteMessageQueueService messageQueueService;
 
@@ -26,16 +26,21 @@ private:
     MessageQueue<std::string> receivingQueue;  // Red za obradu primljenih poruka
 
 
-    void handleClientConnection();       // Metoda za rukovanje klijentom
-    void handleServerConnection();       // Metoda za rukovanje serverom
-    void processMessages();              // Metoda za obradu poruka
+    void handleClientConnection();                          // Metoda za rukovanje klijentom
+    void handleServerConnection();                          // Metoda za rukovanje serverom
+    void receiveFromOtherServer(SOCKET otherServerSocket);  // Metoda za primanje poruka od drugog servera
+    void forwardToClient(SOCKET clientSocket);              // Metoda za prosledjivanje primljene poruke klijentu
+    void processClientMessage(const std::string& message);  // Metoda za obradu poruke koju klijent posalje
+
 
 public:
-    Server(const std::string& serverAddress, int port);
+    Server(const std::string& serverAddress, int port, size_t threadPoolSize = 4);
     ~Server();
 
-
+    // Metoda za slanje poruka u red
     void SendToQueue(const std::string& queueName, const std::string& message);
+    
+    // Start i stop servera
     void start();
     void stop();
 };

@@ -1,31 +1,39 @@
 #ifndef THREADPOOL_H
 #define THREADPOOL_H
 
-#include <functional>
-#include <deque>
-#include <thread>
-#include <mutex>
-#include <condition_variable>
 #include <vector>
+#include <queue>
+#include <thread>
+#include <functional>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 
 
 class ThreadPool {
 public:
-	ThreadPool(size_t numThreads);
-	~ThreadPool();
+    explicit ThreadPool(size_t numThreads);
+    ~ThreadPool();
 
-	template <typename F>
-	void enqueue(F&& f);
+    // Dodavanje zadatka u red
+    void enqueue(std::function<void()> task);
 
 private:
-	void workerThread();
+    // Radne niti
+    std::vector<std::thread> workers;
 
-	std::vector<std::thread> threads;
-	std::deque<std::function<void()>> tasks;
-	std::mutex mutex;
-	std::condition_variable condition;
-	bool stop = false;
+    // Red zadataka
+    std::queue<std::function<void()>> tasks;
 
+    // Sinhronizacija
+    std::mutex queueMutex;
+    std::condition_variable condition;
+
+    // Kontrola rada niti
+    std::atomic<bool> stop;
+
+    // Funkcija koja pokrece niti i obradjuje zadatke
+    void worker();
 };
 
 
