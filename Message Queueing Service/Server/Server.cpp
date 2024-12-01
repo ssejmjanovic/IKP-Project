@@ -25,8 +25,9 @@ void Server::start() {
     running = true;
 
     // Pokretanje niti za rukovanje konekcijama preko ThreadPool-a
-    threadPool.enqueue([this]() {handleClientConnection(); });
     threadPool.enqueue([this]() {handleServerConnection(); });
+    threadPool.enqueue([this]() {handleClientConnection(); });
+    
 
     std::cout << "Server started on " << serverAddress << ":" << port << std::endl;
 }
@@ -48,7 +49,24 @@ void Server::SendToQueue(const std::string& queueName, const std::string& messag
 
 void Server::receiveFromOtherServer(SOCKET otherServerSocket) {
     while (running) {
+        char buffer[BUFFER_SIZE] = { 0 };
 
+        int bytesReceived = recv(otherServerSocket, buffer, BUFFER_SIZE, 0);
+        if (bytesReceived > 0) {
+            std::string receivedMessage(buffer, bytesReceived);
+            std::cout << "Received message from [Soko]: " << receivedMessage << std::endl;
+
+            receivingQueue.enqueue(receivedMessage);
+        }
+        else if (bytesReceived == 0) {
+            std::cout << "Connection with other server closed." << std::endl;
+            break;
+        }
+        else {
+            std::cerr << "Error receiving message from other server." << std::endl;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }
 
@@ -61,7 +79,7 @@ void Server::handleClientConnection() {
     SOCKET serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (serverSocket == INVALID_SOCKET) {
         WSACleanup();
-        throw std::runtime_error("Socket creation failed");
+        throw std::runtime_error(" Socket creation failed");
     }
 
     sockaddr_in serverAddr;
@@ -92,15 +110,30 @@ void Server::handleClientConnection() {
             std::cerr << "Accept failed" << WSAGetLastError() << std::endl;
             continue;
         }
+        else
+        {
+            std::cout << "\nLocal client connected." << std::endl;
+        }
 
         threadPool.enqueue([this, clientSocket = std::move(clientSocket)]() mutable {
             char buffer[BUFFER_SIZE];
-            int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE, 0);
-            if (bytesReceived > 0) {
-                std::string message(buffer, bytesReceived);
-                sendingQueue.enqueue(message);
-                std::cout << "Received message from client: " << message << std::endl;
+            while (running) {
+                int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE, 0);
+                if (bytesReceived > 0) {
+                    std::string message(buffer, bytesReceived);
+                    if (message == "exit") {
+                        std::cout << "Client disconected." << std::endl;
+                        break;
+                    }
+                    sendingQueue.enqueue(message);
+                    std::cout << "Received message from client: " << message << std::endl;
+                }
+                else {
+                    std::cout << "Error receiving data from client: " << WSAGetLastError() << std::endl;
+                    break;
+                }
             }
+            
 
             // Prosledjivanje odgovora klijentu
             forwardToClient(clientSocket);
@@ -113,7 +146,12 @@ void Server::handleClientConnection() {
 }
 
 void Server::handleServerConnection() {
-    
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        throw std::runtime_error("WSAStartup failed");
+    }
+
+
     SOCKET serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (serverSocket == INVALID_SOCKET) {
         std::cerr << "Error creating server socket: " << WSAGetLastError() << std::endl;

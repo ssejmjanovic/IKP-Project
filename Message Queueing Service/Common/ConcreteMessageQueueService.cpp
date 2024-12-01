@@ -1,3 +1,4 @@
+#include "pch.h"
 #include "ConcreteMessageQueueServiceh.h"
 
 void ConcreteMessageQueueService::SendMessage(const std::string& queueName, const void* message, int messageSize) {

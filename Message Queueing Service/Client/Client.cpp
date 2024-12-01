@@ -4,16 +4,55 @@
 #include <ws2tcpip.h>
 #include <thread>
 #include <chrono>
+#include "../Common/ThreadPool.h"
 
 #pragma comment(lib, "ws2_32.lib") // Linkovanje Winsock biblioteke
 
 #define SERVER_PORT 8080
 #define BUFFER_SIZE 1024
 
+std::string globalShutdownFlag = "running";
 
 void error(const char* msg) {
     std::cerr << msg << ": " << WSAGetLastError() << std::endl;
     exit(EXIT_FAILURE);
+}
+
+void receiveMessages(SOCKET clientSocket) {
+    char buffer[BUFFER_SIZE];
+    while (globalShutdownFlag == "running") {
+        int bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
+        if (bytesReceived == SOCKET_ERROR) {
+            std::cerr << "\nFailed to receive message from server." << std::endl;
+            break;
+        }
+        if (bytesReceived == 0) {
+            continue;
+        }
+        buffer[bytesReceived] = '\0';
+        std::cout << "\n[Soko]: " << buffer << std::endl;
+    }
+}
+
+void sendMessage(SOCKET clientSocket) {
+    std::string message;
+    while(globalShutdownFlag == "running") {
+        std::cout << "\nEnter message to send to [Soko] (or type 'exit' to quit): ";
+        std::getline(std::cin, message);
+        if (message == "exit") {
+            send(clientSocket, message.c_str(), message.size(), 0);
+            globalShutdownFlag = "shutdown";
+            break;
+        }
+        
+        if (send(clientSocket, message.c_str(), message.size(), 0) == SOCKET_ERROR) {
+            std::cerr << "\nFailed to send message to server. " << std::endl;
+            continue;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    }
 }
 
 int main() {
@@ -32,34 +71,32 @@ int main() {
 
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(SERVER_PORT);
-    // OVDE IDE IP ADRESA RACUNARA NA KOM JE POKRENUTO
-    inet_pton(AF_INET, "192.168.1.43", &serverAddr.sin_addr);
+
+    // OVDE IDE IP ADRESA RACUNARA NA KOM JE POKRENUTO lokalna adresa
+    inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr);
 
     if (connect(clientSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
         error("Connection to server failed");
     }
 
-    std::cout << "Connected to server" << std::endl;
+    std::cout << "Connected to local server." << std::endl;
 
-    while (true) {
-        std::string message, queueName;
-        std::cout << "Enter queue name: ";
-        std::getline(std::cin, queueName);
-        std::cout << "Enter message: ";
-        std::getline(std::cin, message);
+    ThreadPool threadPool(2);
+    threadPool.enqueue([clientSocket]() {
+        receiveMessages(clientSocket);
+        });
+    threadPool.enqueue([clientSocket]() {
+        sendMessage(clientSocket);
+        });
 
-        if (queueName == "exit" || message == "exit") {
-            break;
-        }
-
-        // Kombinujemo queueName i message za slanje serveru
-        std::string combinedMessage = queueName + ":" + message;
-        if (send(clientSocket, combinedMessage.c_str(), combinedMessage.size(), 0) == SOCKET_ERROR) {
-            std::cerr << "Failed to send message to server." << std::endl;
-        }
+    while (globalShutdownFlag == "running") {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+    
 
     closesocket(clientSocket);
     WSACleanup();
+
+    std::cout << "Client has stopped." << std::endl;
     return 0;
 }

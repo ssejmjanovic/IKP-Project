@@ -15,7 +15,6 @@ public:
     explicit ThreadPool(size_t numThreads);
     ~ThreadPool();
 
-    // Dodavanje zadatka u red
     void enqueue(std::function<void()> task);
 
 private:
@@ -26,11 +25,11 @@ private:
     std::queue<std::function<void()>> tasks;
 
     // Sinhronizacija
-    std::mutex queueMutex;
+    std::mutex tasksMutex;
     std::condition_variable condition;
 
     // Kontrola rada niti
-    std::atomic<bool> stop;
+    bool stop;
 
     // Funkcija koja pokrece niti i obradjuje zadatke
     void worker();

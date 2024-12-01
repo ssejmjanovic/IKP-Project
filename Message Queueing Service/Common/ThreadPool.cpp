@@ -1,3 +1,4 @@
+#include "pch.h"
 #include "ThreadPool.h"
 #include <iostream>
 
@@ -5,14 +6,16 @@
 ThreadPool::ThreadPool(size_t numThreads) : stop(false) {
 	// Kreiranje radnih niti
 	for (size_t i = 0; i < numThreads; i++) {
-		workers.emplace_back(&ThreadPool::worker, this);
+		workers.emplace_back([this] {
+			worker();
+			});
 	}
 }
 
 ThreadPool::~ThreadPool() {
 	// Signalizacija zaustavljanja rada niti
 	{
-		std::lock_guard<std::mutex> lock(queueMutex);
+		std::lock_guard<std::mutex> lock(tasksMutex);
 		stop = true;
 	}
 
@@ -21,16 +24,14 @@ ThreadPool::~ThreadPool() {
 
 	// Cekanje da se sve niti zavrse
 	for (std::thread& worker : workers) {
-		if (worker.joinable()) {
-			worker.join();
-		}
+		worker.join();
 	}
 }
 
 void ThreadPool::enqueue(std::function<void()> task) {
 	// Dodavanje zadatka u red
 	{
-		std::lock_guard<std::mutex> lock(queueMutex);
+		std::lock_guard<std::mutex> lock(tasksMutex);
 		tasks.push(task);
 	}
 
@@ -44,7 +45,7 @@ void ThreadPool::worker() {
 
 		//Cekanje na zadatak iz reda
 		{
-			std::unique_lock<std::mutex> lock(queueMutex);
+			std::unique_lock<std::mutex> lock(tasksMutex);
 			condition.wait(lock, [this] { return stop || !tasks.empty(); });
 
 			// Ako je signalizovano zaustavljanje, izlazimo iz petlje
@@ -53,7 +54,7 @@ void ThreadPool::worker() {
 			}
 
 			// Preuzimanje zadatka sa vrha reda
-			task = std::move(tasks.front());
+			task = tasks.front();
 			tasks.pop();
 		}
 
