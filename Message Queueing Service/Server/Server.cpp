@@ -12,7 +12,7 @@
 
 #define BUFFER_SIZE 1024
 #define OTHER_SERVER_PORT 8081
-#define OTHER_SERVER_IP "adsadsda"
+#define OTHER_SERVER_IP "192.168.1.7"
 
 Server::Server(const std::string& serverAddress, int port, bool isClient, size_t threadPoolSize)
     : serverAddress(serverAddress), port(port), running(false), isClient(false), threadPool(threadPoolSize){}
