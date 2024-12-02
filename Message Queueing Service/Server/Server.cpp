@@ -142,13 +142,18 @@ void Server::handleClientConnection() {
                     break;
                 }
             }
-            
+            closesocket(clientSocket);
+        });
 
-            // Prosledjivanje odgovora klijentu
-            forwardToClient(clientSocket);
+        threadPool.enqueue([this, clientSocket = std::move(clientSocket)]() mutable {
+            while (running) {
+                forwardToClient(clientSocket);
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
             closesocket(clientSocket);
         });
     }
+
 
     closesocket(serverSocket);
     WSACleanup();
@@ -170,7 +175,7 @@ void Server::handleServerConnection() {
     sockaddr_in serverAddr;
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY;
-    serverAddr.sin_port = htons(OTHER_SERVER_PORT);     // Port drugog servera
+    serverAddr.sin_port = htons(8080);     // Port drugog servera
     
     // Binds server socket
     if (bind(serverSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
@@ -186,7 +191,7 @@ void Server::handleServerConnection() {
         return;
     }
 
-    std::cout << "Waiting for connection from another server on port " << OTHER_SERVER_PORT << "..." << std::endl;
+    std::cout << "Waiting for connection from another server on port " << port << "..." << std::endl;
 
     //Slanje poruka drugom serveru
     while (running) {

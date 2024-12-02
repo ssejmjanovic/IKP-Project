@@ -73,7 +73,7 @@ int main() {
     serverAddr.sin_port = htons(SERVER_PORT);
 
     // OVDE IDE IP ADRESA RACUNARA NA KOM JE POKRENUTO lokalna adresa
-    inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr);
+    inet_pton(AF_INET, "192.168.1.12", &serverAddr.sin_addr);
 
     if (connect(clientSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
         error("Connection to server failed");
