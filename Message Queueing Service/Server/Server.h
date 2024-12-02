@@ -18,6 +18,7 @@ private:
     int port;                       // Port servera
     std::atomic<bool> running;      // Indikator da li server radi
     ThreadPool threadPool;          // Thread pool za upravljanje nitima
+    bool isClient;                  // Indikator da li server inicira konekciju ili se povezuje
     
     ConcreteMessageQueueService messageQueueService;
 
@@ -25,16 +26,15 @@ private:
     MessageQueue<std::string> sendingQueue;     // Red za slanje poruka primljenih od klijenta
     MessageQueue<std::string> receivingQueue;  // Red za obradu primljenih poruka
 
-
-    void handleClientConnection();                          // Metoda za rukovanje klijentom
-    void handleServerConnection();                          // Metoda za rukovanje serverom
-    void receiveFromOtherServer(SOCKET otherServerSocket);  // Metoda za primanje poruka od drugog servera
-    void forwardToClient(SOCKET clientSocket);              // Metoda za prosledjivanje primljene poruke klijentu
-    void processClientMessage(const std::string& message);  // Metoda za obradu poruke koju klijent posalje
+    void handleClientConnection();                                                      // Metoda za rukovanje klijentom
+    void handleServerConnection();                                                      // Metoda za rukovanje serverom
+    void receiveFromOtherServer(SOCKET otherServerSocket);                              // Metoda za primanje poruka od drugog servera
+    void forwardToClient(SOCKET clientSocket);                                          // Metoda za prosledjivanje primljene poruke klijentu
+    void connectToOtherServer(const std::string& otherServerIp, int otherServerPort);  // Metoda za konektovanje na drugi server
 
 
 public:
-    Server(const std::string& serverAddress, int port, size_t threadPoolSize = 4);
+    Server(const std::string& serverAddress, int port, bool isClient, size_t threadPoolSize = 4);
     ~Server();
 
     // Metoda za slanje poruka u red

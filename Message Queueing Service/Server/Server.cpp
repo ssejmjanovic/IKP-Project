@@ -12,9 +12,10 @@
 
 #define BUFFER_SIZE 1024
 #define OTHER_SERVER_PORT 8081
+#define OTHER_SERVER_IP "adsadsda"
 
-Server::Server(const std::string& serverAddress, int port, size_t threadPoolSize)
-    : serverAddress(serverAddress), port(port), running(false), threadPool(threadPoolSize){}
+Server::Server(const std::string& serverAddress, int port, bool isClient, size_t threadPoolSize)
+    : serverAddress(serverAddress), port(port), running(false), isClient(false), threadPool(threadPoolSize){}
 
 Server::~Server(){
     stop();
@@ -25,7 +26,15 @@ void Server::start() {
     running = true;
 
     // Pokretanje niti za rukovanje konekcijama preko ThreadPool-a
-    threadPool.enqueue([this]() {handleServerConnection(); });
+    if (isClient) {
+        threadPool.enqueue([this]() {
+            connectToOtherServer(OTHER_SERVER_IP, OTHER_SERVER_PORT);
+            });
+    }
+    else {
+        threadPool.enqueue([this]() {handleServerConnection(); });
+    }
+    
     threadPool.enqueue([this]() {handleClientConnection(); });
     
 
@@ -217,6 +226,52 @@ void Server::handleServerConnection() {
     
 }
 
+void Server::connectToOtherServer(const std::string& otherServerIp, int otherServerPort) {
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        throw std::runtime_error("WSAStartup failed.");
+    }
+
+    SOCKET clientSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (clientSocket == INVALID_SOCKET) {
+        std::cerr << "Error creating client socket: " << WSAGetLastError() << std::endl;
+        return;
+    }
+
+    sockaddr_in serverAddr;
+    serverAddr.sin_family = AF_INET;
+    inet_pton(AF_INET, otherServerIp.c_str(), &serverAddr.sin_addr);
+    serverAddr.sin_port = htons(otherServerPort);
+
+    std::cout << "Connecting to other server at " << otherServerIp << ":" << otherServerPort << "..." << std::endl;
+
+    if (connect(clientSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+        std::cerr << "Error connecting to other server: " << WSAGetLastError() << std::endl;
+        closesocket(clientSocket);
+        WSACleanup();
+        return;
+    }
+
+    std::cout << "Connected to other server!" << std::endl;
+
+    threadPool.enqueue([this, clientSocket]() {receiveFromOtherServer(clientSocket); });
+
+    threadPool.enqueue([this, clientSocket]() {
+        while (running) {
+            while (!sendingQueue.isEmpty()) {
+                std::string message = sendingQueue.dequeue();
+                int bytesSent = send(clientSocket, message.c_str(), message.size(), 0);
+                if (bytesSent == SOCKET_ERROR) {
+                    std::cerr << "Error sending message to other server: " << WSAGetLastError() << std::endl;
+                    break;
+                }
+                std::cout << "Sent message to other server: " << message << std::endl;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        closesocket(clientSocket);
+        });
+}
 
 void Server::forwardToClient(SOCKET clientSocket) {
     while (!receivingQueue.isEmpty()) {
@@ -238,12 +293,12 @@ void Server::forwardToClient(SOCKET clientSocket) {
 
 
 int main() {
-    const std::string serverAddress = "127.0.0.1"; // Adresa na kojoj server osluškuje
-    const int serverPort = 8080;                  // Port na kojem server osluškuje
+    const std::string serverAddress = "192.168.1.12";   // Adresa na kojoj server osluskuje
+    const int serverPort = 8080;                        // Port na kojem server osluškuje
 
     try {
         // Kreiranje i pokretanje servera
-        Server server(serverAddress, serverPort);
+        Server server(serverAddress, serverPort, false);
         std::cout << "Starting server..." << serverAddress << ":" << serverPort << "..." << std::endl;
         server.start();
 
