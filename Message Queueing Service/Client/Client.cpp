@@ -10,6 +10,7 @@
 
 #define SERVER_PORT 8080
 #define BUFFER_SIZE 1024
+#define FRIEND "Soko"
 
 std::string globalShutdownFlag = "running";
 
@@ -30,14 +31,15 @@ void receiveMessages(SOCKET clientSocket) {
             continue;
         }
         buffer[bytesReceived] = '\0';
-        std::cout << "\n[Soko]: " << buffer << std::endl;
+        std::cout << "\n[" << FRIEND <<"]: " << buffer << std::endl;
+        std::cout << "(type 'exit' to quit) [Me]: ";
     }
 }
 
 void sendMessage(SOCKET clientSocket) {
     std::string message;
     while(globalShutdownFlag == "running") {
-        std::cout << "\nEnter message to send to [Soko] (or type 'exit' to quit): ";
+        std::cout << "\n(type 'exit' to quit) [Me]: ";
         std::getline(std::cin, message);
         if (message == "exit") {
             send(clientSocket, message.c_str(), message.size(), 0);

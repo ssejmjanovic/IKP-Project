@@ -16,6 +16,7 @@
 #define MY_SERVER_IP "192.168.1.12"
 #define OTHER_SERVER_IP "192.168.1.7"
 #define IS_IT_CLIENT false
+#define FRIEND "Soko"
 
 Server::Server(const std::string& serverAddress, int port, bool isClient, size_t threadPoolSize)
     : serverAddress(serverAddress), port(port), running(false), isClient(isClient), threadPool(threadPoolSize){}
@@ -66,7 +67,7 @@ void Server::receiveFromOtherServer(SOCKET otherServerSocket) {
         int bytesReceived = recv(otherServerSocket, buffer, BUFFER_SIZE, 0);
         if (bytesReceived > 0) {
             std::string receivedMessage(buffer, bytesReceived);
-            std::cout << "Received message from [Soko]: " << receivedMessage << std::endl;
+            std::cout << "Received message from [" << FRIEND <<"]: " << receivedMessage << std::endl;
 
             receivingQueue.enqueue(receivedMessage);
         }
