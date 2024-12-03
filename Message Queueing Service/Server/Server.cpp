@@ -10,6 +10,13 @@
 
 #pragma comment(lib, "ws2_32.lib") //Winsock biblioteka
 
+/*
+    Ako ne radi i izbacuje LINK greske, sledeci koraci resavaju problem:
+    1. desni klik na Common -> Properties -> Configuration type = Static library, Output Directory = $(SolutionDir)Debug\
+    2. desni klik na Server -> Properties -> Linker -> Input -> Additional Dependecies - dodati $(SolutionDir)Debug\Common.lib
+    3. desni klik na Client -> Properties -> Linker -> Input -> Additional Dependecies - dodati $(SolutionDir)Debug\Common.lib
+*/
+
 #define BUFFER_SIZE 1024
 #define OTHER_SERVER_PORT 8082
 #define MY_SERVER_PORT 8080
