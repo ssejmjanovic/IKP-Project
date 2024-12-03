@@ -11,11 +11,14 @@
 #pragma comment(lib, "ws2_32.lib") //Winsock biblioteka
 
 #define BUFFER_SIZE 1024
-#define OTHER_SERVER_PORT 8081
+#define OTHER_SERVER_PORT 8082
+#define MY_SERVER_PORT 8080
+#define MY_SERVER_IP "192.168.1.12"
 #define OTHER_SERVER_IP "192.168.1.7"
+#define IS_IT_CLIENT false
 
 Server::Server(const std::string& serverAddress, int port, bool isClient, size_t threadPoolSize)
-    : serverAddress(serverAddress), port(port), running(false), isClient(false), threadPool(threadPoolSize){}
+    : serverAddress(serverAddress), port(port), running(false), isClient(isClient), threadPool(threadPoolSize){}
 
 Server::~Server(){
     stop();
@@ -175,7 +178,7 @@ void Server::handleServerConnection() {
     sockaddr_in serverAddr;
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY;
-    serverAddr.sin_port = htons(8080);     // Port drugog servera
+    serverAddr.sin_port = htons(OTHER_SERVER_PORT);     // Port drugog servera
     
     // Binds server socket
     if (bind(serverSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
@@ -199,12 +202,20 @@ void Server::handleServerConnection() {
         sockaddr_in clientAddr;
         int clientAddrSize = sizeof(clientAddr);
         SOCKET otherServerSocket = accept(serverSocket, (sockaddr*)&clientAddr, &clientAddrSize);
+        char ipStr[INET_ADDRSTRLEN]; // Buffer za IPv4
+        inet_ntop(AF_INET, &(clientAddr.sin_addr), ipStr, INET_ADDRSTRLEN);
+
+        std::cout << "Other Server IP: " << ipStr << std::endl;
+
         if (otherServerSocket == INVALID_SOCKET) {
             if (!running) break;
             std::cerr << "Accept failed: " << WSAGetLastError() << std::endl;
             continue;
         }
 
+
+
+        //PROBLEM OVDE
         // Pokretanje niti za primanje poruka od drugog servera
         threadPool.enqueue([this, otherServerSocket]() {receiveFromOtherServer(otherServerSocket); });
 
@@ -298,12 +309,14 @@ void Server::forwardToClient(SOCKET clientSocket) {
 
 
 int main() {
-    const std::string serverAddress = "192.168.1.12";   // Adresa na kojoj server osluskuje
-    const int serverPort = 8080;                        // Port na kojem server osluškuje
+    const std::string serverAddress = MY_SERVER_IP;                  // IP adresa mog servera
+    const int serverPort = MY_SERVER_PORT;                           // Port na kojem server osluskuje za svog klijenta
+    const std::string otherServerIp = OTHER_SERVER_IP;               // IP adresa drugog racunara
+    const int otherServerPort = OTHER_SERVER_PORT;                   // Port za komunikaciju izmedju servera
 
     try {
         // Kreiranje i pokretanje servera
-        Server server(serverAddress, serverPort, false);
+        Server server(serverAddress, serverPort, IS_IT_CLIENT);
         std::cout << "Starting server..." << serverAddress << ":" << serverPort << "..." << std::endl;
         server.start();
 

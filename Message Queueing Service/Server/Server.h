@@ -34,7 +34,7 @@ private:
 
 
 public:
-    Server(const std::string& serverAddress, int port, bool isClient, size_t threadPoolSize = 4);
+    Server(const std::string& serverAddress, int port, bool isClient=false, size_t threadPoolSize = 8);
     ~Server();
 
     // Metoda za slanje poruka u red
